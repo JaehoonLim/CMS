@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.40
+# Crabjob Management Script v1.50
 
 source ./cmsHEADER
 

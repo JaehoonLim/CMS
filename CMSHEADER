@@ -341,8 +341,21 @@ if [ "$1" -le "$4" ]; then
 	#echo -e "crab -getoutput $STARTPOINT_temp"
 	echo -e "$5\n$5" | crab -getoutput $STARTPOINT_temp >> getoutput.log 2>&1
     else
-	#echo -e "crab -getoutput $STARTPOINT_temp-$ENDPOINT_temp"
-	echo -e "$5\n$5" | crab -getoutput $STARTPOINT_temp-$ENDPOINT_temp >> getoutput.log 2>&1
+	local getTotal=$((ENDPOINT_temp-STARTPOINT_temp+1))
+	local getDIV=$((getTotal/10))
+	local getMOD=$((getTotal%10))
+	local getIndex=1
+	local getSTART=$STARTPOINT_temp
+	local getEND=$ENDPOINT_temp
+	while [ "$getIndex" -lt "$getDIV" ]; do
+	    getEND=$((STARTPOINT_temp-1+getIndex*10))
+	    #echo -e "crab -getoutput $getSTART-$getEND"
+	    echo -e "$5\n$5" | crab -getoutput $getSTART-$getEND >> getoutput.log 2>&1
+	    getSTART=$((STARTPOINT_temp+getIndex*10))
+	    getIndex=$((getIndex+1))
+	done
+	#echo -e "crab -getoutput $getSTART-$ENDPOINT_temp"
+	echo -e "$5\n$5" | crab -getoutput $getSTART-$ENDPOINT_temp >> getoutput.log 2>&1
     fi
     sed -e '/Submit done/d' TaskInfo.CMS > TaskInfo.temp
     rm -rf TaskInfo.CMS
@@ -452,6 +465,7 @@ local target=10000
 local rootfile=SSBTree
 local inputtest=0
 local errorfile=0
+local subDir=0
 
 if [ "$#" -eq 1 ]; then
     inputtest=$( echo $1 | sed -e 's/[0-9]*//' )
@@ -485,8 +499,14 @@ echo -e "OUTPUT: Checking ${rootfile}_[$index-$target] files"
 while [ "$index" -le "$target" ]; do
     #if [ ! "$( find ./$Dir/res/ -maxdepth 1 -name ${rootfile}_${index}* )" ]; then     
     if [ ! "$( find ./$Dir/res/ -maxdepth 1 -name ${rootfile}_${index}_* )" ]; then     
-	echo -e "ERROR : ${rootfile}_$index is missing"
-	errorfile=$((errorfile+1))
+	subDir=$( find ./$Dir/res/ -name ${rootfile}_${index}_* )     
+	if [ "$subDir" ]; then     
+	    echo -e "OUTPUT: copy '$( echo $subDir | sed -e "s;./$Dir/res/;;" )'"
+	    cp -f $subDir ./$Dir/res/.
+	else
+	    echo -e "ERROR : ${rootfile}_$index is missing"
+	    errorfile=$((errorfile+1))
+	fi
     fi
     index=$((index+1))
 done

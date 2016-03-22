@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.40
+# Crabjob Management Script v1.50
 
 UserEmail="asdf@asdf.asdf"
 AbDir=$(pwd | sed -e 's;^.*SSBAnalyzer/;;')
@@ -280,6 +280,10 @@ fi
 function CrabStatus(){
 
 rm -f status.CMS
+if [ -a stop.CMS ]; then
+    echo "ATRES : AutoResubmit stop by user"
+    exit
+fi
 echo "START : crab -status is running..."
 
 echo -e "$1\n$1" | crab -status > status.CMS 2>&1

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.50
+# Crabjob Management Script v1.60
 
 source ./cmsHEADER
 
@@ -32,6 +32,12 @@ TJ=$(sed -n 's/Total jobs://p' TaskInfo.CMS)
 IJ_old=$(sed -n 's/Submit at once://p' TaskInfo.CMS)
 STARTPOINT_old=0
 ENDPOINT_old=$(sed -n 's/Submitted jobs://p' TaskInfo.CMS)
+
+if [ $IJ_old ]; then
+    :
+else
+    IJ_old=0
+fi
 
 if [ "$#" -eq 0 ]; then
     if [ "$IJ_old" -gt 0 ]; then

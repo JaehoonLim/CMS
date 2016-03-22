@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.50
+# Crabjob Management Script v1.60
 
 UserEmail="asdf@asdf.asdf"
 AbDir=$(pwd | sed -e 's;^.*SSBAnalyzer/;;')
@@ -22,9 +22,7 @@ echo "ATRES : AutoResubmit start"
 if [ $# -eq 0 ]; then
     RepeatMode=1
     echo -e "REPEAT: $target times" 1>&2 
-fi
-
-if [ $# -eq 1 ]; then
+elif [ $# -eq 1 ]; then
     if [ $1 = "job" ]; then
 	echo "ERROR : Argument1 ERROR" 1>&2
 	exit
@@ -32,9 +30,7 @@ if [ $# -eq 1 ]; then
     RepeatMode=1
     target=$1
     echo -e "REPEAT: $target times" 1>&2
-fi
-
-if [ $# -eq 2 -o $# -eq 3 ]; then
+elif [ $# -eq 2 -o $# -eq 3 ]; then
     if [ $1 = "job" ]; then
 	if [ ! "$( echo $2 | sed -e 's/[0-9]*//' )" ]; then
 	    UntilMode=1
@@ -70,6 +66,15 @@ else
     CheckPass $MyPass
 fi
 
+local TotalJobs=$(sed -n 's/Total jobs://p' TaskInfo.CMS)
+local JobCushion=$(sed -n 's/Submit at once://p' TaskInfo.CMS)
+JobCushion=$((JobCushion/10))
+if [ $JobCushion -lt 20 ]; then
+    JobCushion=20
+elif [ $JobCushion -gt 50 ]; then
+    JobCushion=50
+fi
+
 while [ $DoWhile -eq 1 ]; do 
 
     rm -f status.CMS
@@ -85,7 +90,7 @@ while [ $DoWhile -eq 1 ]; do
     local SubJobs=$( cat status.CMS | grep 'Jobs Submitted' | sed -e 's/Jobs Submitted//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
     local RunJobs=$( cat status.CMS | grep 'Jobs Running' | sed -e 's/Jobs Running//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
     local DoneJobs=$( cat status.CMS | sed -n '/Jobs with Wrapper Exit Code : 0/p' | sed -e 's/Jobs with Wrapper Exit Code : 0.*$//' -e 's/^.>>*>> //')
-    local TotalJobs=$( cat status.CMS | grep 'Total Jobs' | sed -e 's/Total Jobs//' -e 's/crab://' -e 's/ //g' -e 's/\t//g' )
+    #local TotalJobs=$( cat status.CMS | grep 'Total Jobs' | sed -e 's/Total Jobs//' -e 's/crab://' -e 's/ //g' -e 's/\t//g' )
 
     if [ $UntilMode -eq 1 ]; then
 	if [ $targetjob -gt $TotalJobs ]; then
@@ -250,13 +255,16 @@ while [ $DoWhile -eq 1 ]; do
 
     if [ $UntilMode -eq 1 ]; then
 	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob"
-	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs))" -lt "$targetjob" ]; then
+	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs+20))" -lt "$targetjob" ]; then
 	    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
 	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log) : $ErrorTime"
             echo -e "$AbDir \n\nSTATUS: Submmited : $SubJobs \nSTATUS: Running   : $RunJobs \nSTATUS: Done      : $DoneJobs \nSTATUS: Failed    : $ResubJobs \nSTATUS: Cancelled : $CancelledJobs \nSTATUS: Aborted   : $AbortedJobs \nSTATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr \n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Number of jobs' $UserEmail"
 	    exit
 	fi
-	if [ $DoneJobs -ge $targetjob ]; then
+        if [ $targetjob -eq $TotalJobs ]; then
+	    JobCushion=0
+	fi
+	if [ $((DoneJobs+JobCushion)) -ge $targetjob ]; then
 	    DoWhile=0
 	fi 
     fi 
@@ -439,7 +447,7 @@ if [ "$1" -le "$4" ]; then
     echo "Getoutput done" >> TaskInfo.CMS
     echo " END  : crab -getoutput end"
     OutputCheck $STARTPOINT_temp $ENDPOINT_temp
-    GSISSH_RM
+    #GSISSH_RM
 
     fi
 
@@ -479,6 +487,17 @@ gsissh $RH rm -rf ./$TN/CMSSW_*.*
 gsissh $RH rm -rf ./$TN/crab_*.*
 gsissh $RH rm -rf ./$TN/out_*.*
 echo " END  : rm end"
+
+}
+
+function GSISSH_RM_onebyone(){
+
+local RH=$(sed -n 's/Remote Host://p' TaskInfo.CMS)
+local TN=$(sed -n 's/TaskName://p' TaskInfo.CMS)
+
+gsissh $RH rm -rf ./$TN/CMSSW_${1}.std*
+gsissh $RH rm -rf ./$TN/crab_fjr_${1}.xml
+gsissh $RH rm -rf ./$TN/out_files_${1}.tgz
 
 }
 
@@ -537,32 +556,16 @@ function OutputCheck(){
 
 local Dir=$( grep 'TaskName:' TaskInfo.CMS | sed -e 's/^[0-9a-zA-Z:]*_//' -e 's/_[0-9a-zA-Z]*$//' )
 local index=1
-local target=10000
-local rootfile=SSBTree
+local target=1000
 local inputtest=0
 local errorfile=0
 local subDir=0
 
 if [ "$#" -eq 1 ]; then
-    inputtest=$( echo $1 | sed -e 's/[0-9]*//' )
-    if [ "$inputtest" ]; then
-	rootfile=$1
-    else
-	target=$1
-    fi
+    target=$1
 elif [ "$#" -eq 2 ]; then
-    inputtest=$( echo $2 | sed -e 's/[0-9]*//' )
-    if [ "$inputtest" ]; then
-	target=$1
-	rootfile=$2
-    else
-	index=$1
-	target=$2
-    fi
-elif [ "$#" -eq 3 ]; then
     index=$1
     target=$2
-    rootfile=$3
 fi
 if [ "$index" -gt "$target" ]; then
     inputtest=$index
@@ -579,21 +582,26 @@ while [ "$index" -le "$target" ]; do
 	if [ "$subDir" ]; then     
 	    echo -e "OUTPUT: copy '$( echo $subDir | sed -e "s;./$Dir/res/;;" )'"
 	    cp -f $subDir ./$Dir/res/.
+	    GSISSH_RM_onebyone $index
 	else
 	    echo -e "ERROR : ${rootfile}_$index is missing"
 	    errorfile=$((errorfile+1))
 	fi
+    else
+	GSISSH_RM_onebyone $index
     fi
     index=$((index+1))
 done
 
 if [ "$errorfile" -gt 0 ]; then
     ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
-    echo -e "ERROR : $errorfile files are missing : $ErrorTime"
-    echo -e "$AbDir \n\nERROR : $errorfile files are missing  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : File Missing' $UserEmail"
-    exit
+    echo -e "OUTPUT: $errorfile files are missing : $ErrorTime"
+    if [ "$errorfile" -gt 100 ]; then
+	echo -e "$AbDir \n\nERROR : $errorfile files are missing  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : File Missing' $UserEmail"
+	exit
+    fi
+else
+    echo "OUTPUT: Output files are OK"
 fi
-
-echo "OUTPUT: Output files are OK"
 
 }

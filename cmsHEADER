@@ -1,5 +1,8 @@
 #!/bin/bash
-# Crabjob Management Script v1.20
+# Crabjob Management Script v1.30
+
+UserEmail="asdf@asdf.asdf"
+AbDir=$(pwd)
 
 function AutoResubmit(){
 
@@ -224,6 +227,7 @@ while [ $DoWhile -eq 1 ]; do
 	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob"
 	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs))" -lt "$targetjob" ]; then
 	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log)"
+            echo -e "$AbDir \n\nSTATUS: Submmited : $SubJobs \nSTATUS: Running   : $RunJobs \nSTATUS: Done      : $DoneJobs \nSTATUS: Failed    : $ResubJobs \nSTATUS: Cancelled : $CancelledJobs \nSTATUS: Aborted   : $AbortedJobs \nSTATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : Number of jobs" $UserEmail'
 	    exit
 	fi
 	if [ $DoneJobs -ge $targetjob ]; then
@@ -270,6 +274,7 @@ if [ -a TaskInfo.CMS ]; then
         if [ "$ServerName_back" != "$ServerName" ]; then
 	    if [ "$ServerName_back" ]; then
 		echo -e "ERROR : ServerName? ($ServerName_back / $ServerName)"
+		echo -e "$AbDir \n\nERROR : ServerName? ($ServerName_back / $ServerName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : ServerName" $UserEmail'
 		exit
 	    else
 		sed -e '/Remote Host:/d' TaskInfo.CMS > TaskInfo.temp
@@ -283,6 +288,7 @@ if [ -a TaskInfo.CMS ]; then
 	if [ "$TaskName_back" != "$TaskName" ]; then
 	    if [ "$TaskName_back" ]; then
 		echo -e "ERROR : TaskName? ($TaskName_back / $TaskName)"
+		echo -e "$AbDir \n\nERROR : TaskName? ($TaskName_back / $TaskName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : TaskName" $UserEmail'
 		exit
 	    else
 		sed -e '/TaskName:/d' TaskInfo.CMS > TaskInfo.temp
@@ -543,6 +549,7 @@ done
 
 if [ "$errorfile" -gt 0 ]; then
     echo -e "ERROR : $errorfile files are missing"
+    echo -e "$AbDir \n\nERROR : $errorfile files are missing  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : File Missing" $UserEmail'
     exit
 fi
 

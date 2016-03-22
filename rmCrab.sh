@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.20
+# Crabjob Management Script v1.30
 
 crab -clean
 rm -rf nohup.out

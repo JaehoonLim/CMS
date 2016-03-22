@@ -1,7 +1,7 @@
 #!/bin/bash
-# Crabjob Management Script v1.20
+# Crabjob Management Script v1.30
 
-source ./CMSHEADER
+source ./cmsHEADER
 
 if [ "$#" -gt 1 ]; then
     echo "ERROR : Argument" 1>&2
@@ -30,10 +30,19 @@ STARTPOINT=0
 ENDPOINT=0
 TJ=$(sed -n 's/Total jobs://p' TaskInfo.CMS)
 IJ_old=$(sed -n 's/Submit at once://p' TaskInfo.CMS)
+STARTPOINT_old=0
 ENDPOINT_old=$(sed -n 's/Submitted jobs://p' TaskInfo.CMS)
 
 if [ "$ENDPOINT_old" ]; then
-    STARTPOINT_old=$((ENDPOINT_old-IJ_old+1))
+    if [ "$ENDPOINT_old" -ne "$TJ" ]; then
+        STARTPOINT_old=$((ENDPOINT_old-IJ_old+1))
+    else
+        while [ "$STARTPOINT_old" -lt "$TJ" ]; do
+            STARTPOINT_old=$((STARTPOINT_old+IJ_old))
+        done
+        STARTPOINT_old=$((STARTPOINT_old-IJ_old+1))
+        IJ_old=$((ENDPOINT_old-STARTPOINT_old+1))
+    fi
 else
     IJ_old=0
     STARTPOINT_old=0

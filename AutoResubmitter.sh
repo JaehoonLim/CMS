@@ -1,6 +1,6 @@
 #!/bin/bash
-# Crabjob Management Script v1.20
+# Crabjob Management Script v1.30
 
-source ./CMSHEADER
+source ./cmsHEADER
 
 AutoResubmit $1 $2

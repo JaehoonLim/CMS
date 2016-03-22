@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crabjob Management Script v1.30
+# Crabjob Management Script v1.40
 
 source ./cmsHEADER
 
@@ -33,6 +33,24 @@ IJ_old=$(sed -n 's/Submit at once://p' TaskInfo.CMS)
 STARTPOINT_old=0
 ENDPOINT_old=$(sed -n 's/Submitted jobs://p' TaskInfo.CMS)
 
+if [ "$#" -eq 0 ]; then
+    if [ "$IJ_old" -gt 0 ]; then
+	IJ=$IJ_old
+    else
+	IJ=$TJ
+    fi
+else
+    if [ "$1" = "all" ]; then
+	IJ=$TJ
+    else
+	IJ=$1
+    fi
+fi
+
+if [ "$TJ" -lt "$IJ" ]; then
+    IJ=$TJ
+fi
+
 if [ "$ENDPOINT_old" ]; then
     if [ "$ENDPOINT_old" -ne "$TJ" ]; then
         STARTPOINT_old=$((ENDPOINT_old-IJ_old+1))
@@ -52,24 +70,6 @@ fi
 if [ "$STARTPOINT_old" -lt 0 ]; then
     STARTPOINT_old=1
     IJ_old=$((ENDPOINT_old))
-fi
-
-if [ "$#" -eq 0 ]; then
-    if [ "$IJ_old" -gt 0 ]; then
-	IJ=$IJ_old
-    else
-	IJ=$TJ
-    fi
-else
-    if [ "$1" = "all" ]; then
-	IJ=$TJ
-    else
-	IJ=$1
-    fi
-fi
-
-if [ "$TJ" -lt "$IJ" ]; then
-    IJ=$TJ
 fi
 
 echo "" 1>&2

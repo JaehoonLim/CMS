@@ -1,5 +1,11 @@
 #!/bin/bash
-# Crabjob Management Script v1.30
+# Crabjob Management Script v1.40
+
+if [ -a TaskInfo.CMS ]; then
+    RH=$(sed -n 's/Remote Host://p' TaskInfo.CMS)
+    TN=$(sed -n 's/TaskName://p' TaskInfo.CMS)
+    gsissh $RH rm -rf ./$TN
+fi
 
 crab -clean
 rm -rf nohup.out

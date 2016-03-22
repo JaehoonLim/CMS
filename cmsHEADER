@@ -1,8 +1,9 @@
 #!/bin/bash
-# Crabjob Management Script v1.30
+# Crabjob Management Script v1.40
 
 UserEmail="asdf@asdf.asdf"
-AbDir=$(pwd)
+AbDir=$(pwd | sed -e 's;^.*SSBAnalyzer/;;')
+ErrorTime=0
 
 function AutoResubmit(){
 
@@ -134,10 +135,18 @@ while [ $DoWhile -eq 1 ]; do
 	echo "" >> resubmit.log
 	echo "" >> resubmit.log
         cat resubmit.CMS >> resubmit.log
-        local ResubJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+        local FailedCheck=$( cat resubmit.CMS | grep 'Job not submitted')
+        if [ $FailedCheck ]; then
+	    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+	    echo -e "ERROR : Resubmit Error (Failed job : $ToResubmit) : $ErrorTime"
+	    echo -e "$AbDir \n\nERROR : Resubmit Error (Failed job : $ToResubmit) \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Failed job Resubmit' $UserEmail"
+	    exit 
+	else
+	    local ResubJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
 
-	echo -e " JOB  : $ResubJobs jobs resubmitted"
-	echo " END  : crab -resubmit end"
+	    echo -e " JOB  : $ResubJobs jobs resubmitted"
+	    echo " END  : crab -resubmit end"
+	fi
 
     else
 
@@ -170,10 +179,18 @@ while [ $DoWhile -eq 1 ]; do
         echo "" >> resubmit.log
         echo "" >> resubmit.log
         cat resubmit.CMS >> resubmit.log
-        local CancelledJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+        local CancelledCheck=$( cat resubmit.CMS | grep 'Job not submitted')
+        if [ $CancelledCheck ]; then
+	    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+	    echo -e "ERROR : Resubmit Error (Cancelled job : $Cancelled) : $ErrorTime"
+	    echo -e "$AbDir \n\nERROR : Resubmit Error (Cancelled job : $Cancelled) \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Cancelled job Resubmit' $UserEmail"
+	    exit 
+	else
+            local CancelledJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
 
-	echo -e " JOB  : $CancelledJobs jobs resubmitted"
-        echo " END  : crab -resubmit end"
+	    echo -e " JOB  : $CancelledJobs jobs resubmitted"
+            echo " END  : crab -resubmit end"
+	fi
 
     else
 	CancelledJobs=0
@@ -195,10 +212,18 @@ while [ $DoWhile -eq 1 ]; do
         echo "" >> resubmit.log
         echo "" >> resubmit.log
         cat resubmit.CMS >> resubmit.log
-        local AbortedJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+        local AbortedCheck=$( cat resubmit.CMS | grep 'Job not submitted')
+        if [ $AbortedCheck ]; then
+	    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+	    echo -e "ERROR : Resubmit Error (Aborted job : $Aborted) : $ErrorTime"
+	    echo -e "$AbDir \n\nERROR : Resubmit Error (Aborted job : $Aborted) \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Aborted job Resubmit' $UserEmail"
+	    exit 
+	else
+            local AbortedJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
 
-	echo -e " JOB  : $AbortedJobs jobs resubmitted"
-        echo " END  : crab -resubmit end"
+	    echo -e " JOB  : $AbortedJobs jobs resubmitted"
+            echo " END  : crab -resubmit end"
+	fi
 
     else
 	AbortedJobs=0
@@ -226,8 +251,9 @@ while [ $DoWhile -eq 1 ]; do
     if [ $UntilMode -eq 1 ]; then
 	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob"
 	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs))" -lt "$targetjob" ]; then
-	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log)"
-            echo -e "$AbDir \n\nSTATUS: Submmited : $SubJobs \nSTATUS: Running   : $RunJobs \nSTATUS: Done      : $DoneJobs \nSTATUS: Failed    : $ResubJobs \nSTATUS: Cancelled : $CancelledJobs \nSTATUS: Aborted   : $AbortedJobs \nSTATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : Number of jobs" $UserEmail'
+	    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log) : $ErrorTime"
+            echo -e "$AbDir \n\nSTATUS: Submmited : $SubJobs \nSTATUS: Running   : $RunJobs \nSTATUS: Done      : $DoneJobs \nSTATUS: Failed    : $ResubJobs \nSTATUS: Cancelled : $CancelledJobs \nSTATUS: Aborted   : $AbortedJobs \nSTATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr \n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Number of jobs' $UserEmail"
 	    exit
 	fi
 	if [ $DoneJobs -ge $targetjob ]; then
@@ -273,8 +299,9 @@ if [ -a TaskInfo.CMS ]; then
     if [ "$ServerName" ]; then
         if [ "$ServerName_back" != "$ServerName" ]; then
 	    if [ "$ServerName_back" ]; then
-		echo -e "ERROR : ServerName? ($ServerName_back / $ServerName)"
-		echo -e "$AbDir \n\nERROR : ServerName? ($ServerName_back / $ServerName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : ServerName" $UserEmail'
+		ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+		echo -e "ERROR : ServerName? ($ServerName_back / $ServerName) : $ErrorTime"
+		echo -e "$AbDir \n\nERROR : ServerName? ($ServerName_back / $ServerName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : ServerName' $UserEmail"
 		exit
 	    else
 		sed -e '/Remote Host:/d' TaskInfo.CMS > TaskInfo.temp
@@ -287,8 +314,9 @@ if [ -a TaskInfo.CMS ]; then
     if [ "$TaskName" ]; then
 	if [ "$TaskName_back" != "$TaskName" ]; then
 	    if [ "$TaskName_back" ]; then
-		echo -e "ERROR : TaskName? ($TaskName_back / $TaskName)"
-		echo -e "$AbDir \n\nERROR : TaskName? ($TaskName_back / $TaskName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : TaskName" $UserEmail'
+		ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+		echo -e "ERROR : TaskName? ($TaskName_back / $TaskName) : $ErrorTime"
+		echo -e "$AbDir \n\nERROR : TaskName? ($TaskName_back / $TaskName)  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : TaskName' $UserEmail"
 		exit
 	    else
 		sed -e '/TaskName:/d' TaskInfo.CMS > TaskInfo.temp
@@ -328,8 +356,16 @@ if [ "$1" -lt "$3" ]; then
 	#echo -e "crab -submit $STARTPOINT_temp-$ENDPOINT_temp"
 	echo -e "$4\n$4" | crab -submit $STARTPOINT_temp-$ENDPOINT_temp >> submit.log 2>&1
     fi
-    RefreshEndpoint $ENDPOINT_temp
-    echo " END  : crab -submit end"
+    local SubmitCheck=$( cat submit.log | grep 'Job not submitted')
+    if [ $SubmitCheck ]; then
+	ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+	echo -e "ERROR : Submit Error ($STARTPOINT_temp-$ENDPOINT_temp) : $ErrorTime"
+	echo -e "$AbDir \n\nERROR : Submit Error ($STARTPOINT_temp-$ENDPOINT_temp) \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : Submit' $UserEmail"
+	exit 
+    else
+	RefreshEndpoint $ENDPOINT_temp
+	echo " END  : crab -submit end"
+    fi
 
     #fi
 
@@ -548,8 +584,9 @@ while [ "$index" -le "$target" ]; do
 done
 
 if [ "$errorfile" -gt 0 ]; then
-    echo -e "ERROR : $errorfile files are missing"
-    echo -e "$AbDir \n\nERROR : $errorfile files are missing  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr" | ssh -p 50022 MAIL@ssb.korea.ac.kr 'cat | mail -s "CMS ERROR : File Missing" $UserEmail'
+    ErrorTime=$(TZ=KST-9 date +%Y/%m/%d\ -\ %H:%M:%S) 
+    echo -e "ERROR : $errorfile files are missing : $ErrorTime"
+    echo -e "$AbDir \n\nERROR : $errorfile files are missing  \n\n Mail send by $USER@$HOSTNAME through MAIL@SSB.Korea.ac.kr\n$ErrorTime" | ssh -p 50022 MAIL@ssb.korea.ac.kr "cat | mail -s 'CMS ERROR : File Missing' $UserEmail"
     exit
 fi
 

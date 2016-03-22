@@ -1,0 +1,501 @@
+#!/bin/bash
+
+function AutoResubmit(){
+
+local index=1
+local DoWhile=1
+local RepeatMode=0
+local UntilMode=0
+local target=1
+local targetjob=1
+local RepeatCheck=0
+local MyPass=0
+
+echo ""
+echo "ATRES : AutoResubmit start"
+
+if [ $# -eq 0 ]; then
+    RepeatMode=1
+    echo -e "REPEAT: $target times" 1>&2 
+fi
+
+if [ $# -eq 1 ]; then
+    if [ $1 = "job" ]; then
+	echo "ERROR : Argument1 ERROR" 1>&2
+	exit
+    fi
+    RepeatMode=1
+    target=$1
+    echo -e "REPEAT: $target times" 1>&2
+fi
+
+if [ $# -eq 2 -o $# -eq 3 ]; then
+    if [ $1 = "job" ]; then
+	if [ ! "$( echo $2 | sed -e 's/[0-9]*//' )" ]; then
+	    UntilMode=1
+	    targetjob=$2
+	    if [ $# -eq 2 ]; then
+		echo -e "REPEAT: Until $targetjob jobs end" 1>&2
+	    fi
+	else
+	    echo "ERROR : Argument2 ERROR" 1>&2
+	    exit
+	fi
+    else
+	echo "ERROR : Argument1 ERROR" 1>&2
+	exit
+    fi
+fi
+
+if [ $# -eq 3 ]; then
+    echo -e "REPEAT: Until $targetjob jobs end"
+    MyPass=$3
+else
+    echo "DANGER: Do not Ctrl+c between status 'START' and status 'END'" 1>&2
+    echo -n "CHECK : Press 'Enter' to continue (or Ctrl+c to exit)" 1>&2 
+    stty -echo
+    read DangerCheck
+    stty echo
+    echo -e "\t" 1>&2
+    echo -n "PASSWD: Input your voms password : " 1>&2
+    stty -echo
+    read MyPass
+    stty echo
+    echo -e "\t" 1>&2
+    CheckPass $MyPass
+fi
+
+while [ $DoWhile -eq 1 ]; do 
+
+    rm -f status.CMS
+    rm -f resubmit.CMS
+
+    if [ $index -ne 1 ]; then
+	echo "DELAY : Waiting next trial (5 min)"
+	sleep 300
+    fi
+
+    CrabStatus $MyPass resubmit.log
+
+    local ToResubmit=$( cat status.CMS | sed -e '1,/ExitCodes Summary/d' -e '/Total Jobs/,$d' -e '/Exit Code : 0/,/Exit Code meaning/d' -e '/See https/,/Wrapper/d' -e '/Exit Code/d' -e '/ExitCodes/d' -e 's/^.*List of jobs://' -e 's/ //g' -e 's/\t//g' -e 's/\n//g' -e 's/$/,/' -e 's/^,//' | tr -d '\n' | sed -e 's/,$/\n/' )
+    local SubJobs=$( cat status.CMS | grep 'Jobs Submitted' | sed -e 's/Jobs Submitted//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
+    local RunJobs=$( cat status.CMS | grep 'Jobs Running' | sed -e 's/Jobs Running//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
+    local DoneJobs=$( cat status.CMS | sed -n '/Jobs with Wrapper Exit Code : 0/p' | sed -e 's/Jobs with Wrapper Exit Code : 0.*$//' -e 's/^.>>*>> //')
+    local TotalJobs=$( cat status.CMS | grep 'Total Jobs' | sed -e 's/Total Jobs//' -e 's/crab://' -e 's/ //g' -e 's/\t//g' )
+
+    if [ $UntilMode -eq 1 ]; then
+	if [ $targetjob -gt $TotalJobs ]; then
+	    targetjob=$TotalJobs
+	fi
+    fi
+
+    if [ $SubJobs ]; then
+	:
+    else
+	SubJobs=0
+    fi
+
+    if [ $RunJobs ]; then
+	:
+    else
+	RunJobs=0
+    fi
+
+    if [ $DoneJobs ]; then
+	:
+    else
+	DoneJobs=0
+    fi
+
+    if [ $ToResubmit ]; then
+
+	rm -f resubmit.CMS
+
+	echo -e " JOB  : Failed job is $ToResubmit"
+	echo "START : crab -getoutput is running..."
+
+	echo -e "$MyPass\n$MyPass" | crab -getoutput $ToResubmit > resubmit.CMS 2>&1
+	echo "" >> resubmit.log
+	echo "" >> resubmit.log
+	echo "" >> resubmit.log
+        cat resubmit.CMS >> resubmit.log
+
+	echo " END  : crab -getoutput end"
+	echo "START : crab -resubmit is running..."
+
+	echo -e "$MyPass\n$MyPass" | crab -forceResubmit $ToResubmit > resubmit.CMS 2>&1
+	echo "" >> resubmit.log
+	echo "" >> resubmit.log
+	echo "" >> resubmit.log
+        cat resubmit.CMS >> resubmit.log
+        local ResubJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+
+	echo -e " JOB  : $ResubJobs jobs resubmitted"
+	echo " END  : crab -resubmit end"
+
+    else
+
+	ResubJobs=0
+	echo " JOB  : There is No Failed job"
+
+    fi
+
+
+    local Cancelled=$( cat status.CMS | grep 'List of jobs Cancelled' | sed -e 's/^.*List of jobs Cancelled: //' )
+
+    if [ $Cancelled ]; then
+
+	rm -f resubmit.CMS
+
+	echo -e " JOB  : Cancelled job is $Cancelled"
+        echo "START : crab -kill is running..."
+
+        echo -e "$MyPass\n$MyPass" | crab -kill $Cancelled > resubmit.CMS 2>&1
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        cat resubmit.CMS >> resubmit.log
+
+        echo " END  : crab -kill end"
+        echo "START : crab -resubmit is running..."
+
+        echo -e "$MyPass\n$MyPass" | crab -forceResubmit $Cancelled > resubmit.CMS 2>&1
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        cat resubmit.CMS >> resubmit.log
+        local CancelledJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+
+	echo -e " JOB  : $CancelledJobs jobs resubmitted"
+        echo " END  : crab -resubmit end"
+
+    else
+	CancelledJobs=0
+        echo " JOB  : There is No Cancelled job"
+    fi
+
+    index=$((index+1))
+
+    echo ""
+    echo -e "STATUS: Submmited : $SubJobs"
+    echo -e "STATUS: Running   : $RunJobs"
+    echo -e "STATUS: Done      : $DoneJobs"
+    echo -e "STATUS: Failed    : $ResubJobs"
+    echo -e "STATUS: Cancelled : $CancelledJobs"
+
+    if [ $RepeatMode -eq 1 ]; then
+	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs)) / $TotalJobs"
+	if [ $index -gt $target ]; then
+	    DoWhile=0
+	fi 
+    fi 
+
+    if [ $UntilMode -eq 1 ]; then
+	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs)) / $targetjob"
+	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs))" -lt "$targetjob" ]; then
+	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log)"
+	    exit
+	fi
+	if [ $DoneJobs -ge $targetjob ]; then
+	    DoWhile=0
+	fi 
+    fi 
+
+    echo ""
+
+done
+
+rm -f status.CMS
+rm -f resubmit.CMS
+
+echo "ATRES : AutoResubmit end"
+echo ""
+
+if [ $# -le 2 ]; then
+    exit
+fi
+
+}
+
+function CrabStatus(){
+
+rm -f status.CMS
+echo "START : crab -status is running..."
+
+echo -e "$1\n$1" | crab -status > status.CMS 2>&1
+echo "" >> $2
+echo "" >> $2
+echo "" >> $2
+cat status.CMS >> $2
+
+local ServerName=$( cat status.CMS | grep 'crab:  contacting remote host' | sed -e 's/crab:  contacting remote host//' -e 's/ //g' -e 's/\t//g' )
+local TaskName=$( cat status.CMS | grep 'Your task name is: ' | sed -e 's/Your task name is://' -e 's/ //g' -e 's/\t//g' )
+local TotalJobs=$( cat status.CMS | grep 'Total Jobs' | sed -e 's/Total Jobs//' -e 's/crab://' -e 's/ //g' -e 's/\t//g' )
+
+if [ -a TaskInfo.CMS ]; then
+    local ServerName_back=$(sed -n 's/Remote Host://p' TaskInfo.CMS)
+    local TaskName_back=$(sed -n 's/TaskName://p' TaskInfo.CMS)
+    local TotalJobs_back=$(sed -n 's/Total jobs://p' TaskInfo.CMS)
+    if [ "$ServerName" ]; then
+        if [ "$ServerName_back" != "$ServerName" ]; then
+	    if [ "$ServerName_back" ]; then
+		echo -e "ERROR : ServerName? ($ServerName_back / $ServerName)"
+		exit
+	    else
+		sed -e '/Remote Host:/d' TaskInfo.CMS > TaskInfo.temp
+		rm -rf TaskInfo.CMS
+		mv TaskInfo.temp TaskInfo.CMS
+		echo -e "Remote Host:$ServerName" >> TaskInfo.CMS
+	    fi
+	fi
+    fi
+    if [ "$TaskName" ]; then
+	if [ "$TaskName_back" != "$TaskName" ]; then
+	    if [ "$TaskName_back" ]; then
+		echo -e "ERROR : TaskName? ($TaskName_back / $TaskName)"
+		exit
+	    else
+		sed -e '/TaskName:/d' TaskInfo.CMS > TaskInfo.temp
+		rm -rf TaskInfo.CMS
+		mv TaskInfo.temp TaskInfo.CMS
+		echo -e "TaskName:$TaskName" >> TaskInfo.CMS
+	    fi
+	fi
+    fi
+else
+    echo -e "Remote Host:$ServerName" >> TaskInfo.CMS
+    echo -e "TaskName:$TaskName" >> TaskInfo.CMS
+    echo -e "Total jobs:$TotalJobs" >> TaskInfo.CMS
+fi
+
+echo " END  : crab -status end"
+
+}
+
+function CrabSubmit(){
+
+if [ "$1" -lt "$3" ]; then
+
+    #if [ "$(CheckSubmit)" = "no" ]; then
+
+    local STARTPOINT_temp=$2
+    local ENDPOINT_temp=$3
+    if [ "$1" -gt "$2" ]; then
+	STARTPOINT_temp=$1
+	STARTPOINT_temp=$((STARTPOINT_temp+1))
+    fi
+    echo -e "START : crab -submit $STARTPOINT_temp-$ENDPOINT_temp ($((ENDPOINT_temp-STARTPOINT_temp+1)) jobs) is running..."
+    if [ "$STARTPOINT_temp" -eq "$ENDPOINT_temp" ]; then
+	#echo -e "crab -submit $STARTPOINT_temp"
+	echo -e "$4\n$4" | crab -submit $STARTPOINT_temp >> submit.log 2>&1
+    else
+	#echo -e "crab -submit $STARTPOINT_temp-$ENDPOINT_temp"
+	echo -e "$4\n$4" | crab -submit $STARTPOINT_temp-$ENDPOINT_temp >> submit.log 2>&1
+    fi
+    RefreshEndpoint $ENDPOINT_temp
+    echo " END  : crab -submit end"
+
+    #fi
+
+fi
+
+}
+
+function CrabResubmit(){
+
+if [ "$1" -le "$3" ]; then
+    if [ "$(CheckGetoutput)" = "no" ]; then
+	if [ "$2" -gt "$3" ]; then
+	    #echo -e "ATREB : AutoResubmit job $2"
+	    AutoResubmit job $2 $4
+	else 
+	    #echo -e "ATREB : AutoResubmit job $3"
+	    AutoResubmit job $3 $4 
+	fi
+    fi
+fi
+
+}
+
+function CrabGetoutput(){
+
+if [ "$1" -le "$4" ]; then
+
+    if [ "$(CheckGetoutput)" = "no" ]; then
+
+    local STARTPOINT_temp=$3
+    local ENDPOINT_temp=$4
+
+    if [ "$4" -gt "$2" ]; then
+	if [ "$3" -le "$2" ]; then
+	    STARTPOINT_temp=$2
+	    STARTPOINT_temp=$((STARTPOINT_temp+1))
+	fi
+    else
+	STARTPOINT_temp=$1
+	ENDPOINT_temp=$2
+    fi
+
+    echo -e "START : crab -getoutput $STARTPOINT_temp-$ENDPOINT_temp is running..."
+    if [ "$STARTPOINT_temp" -eq "$ENDPOINT_temp" ]; then
+	#echo -e "crab -getoutput $STARTPOINT_temp"
+	echo -e "$5\n$5" | crab -getoutput $STARTPOINT_temp >> getoutput.log 2>&1
+    else
+	#echo -e "crab -getoutput $STARTPOINT_temp-$ENDPOINT_temp"
+	echo -e "$5\n$5" | crab -getoutput $STARTPOINT_temp-$ENDPOINT_temp >> getoutput.log 2>&1
+    fi
+    sed -e '/Submit done/d' TaskInfo.CMS > TaskInfo.temp
+    rm -rf TaskInfo.CMS
+    mv TaskInfo.temp TaskInfo.CMS
+    echo "Getoutput done" >> TaskInfo.CMS
+    echo " END  : crab -getoutput end"
+    OutputCheck $STARTPOINT_temp $ENDPOINT_temp
+    GSISSH_RM
+
+    fi
+
+fi
+
+}
+
+function CheckSubmit(){
+
+local isSubmit=$( grep 'Submit done' TaskInfo.CMS)
+if [ "$isSubmit" ]; then
+    echo "yes"
+else
+    echo "no"
+fi
+
+}
+
+function CheckGetoutput(){
+
+local isGetoutput=$( grep 'Getoutput done' TaskInfo.CMS)
+if [ "$isGetoutput" ]; then
+    echo "yes"
+else
+    echo "no"
+fi
+
+}
+
+function GSISSH_RM(){
+
+local RH=$(sed -n 's/Remote Host://p' TaskInfo.CMS)
+local TN=$(sed -n 's/TaskName://p' TaskInfo.CMS)
+
+echo -e "START : rm -rf $TN/* is running..."
+gsissh $RH rm -rf ./$TN/CMSSW_*.*
+gsissh $RH rm -rf ./$TN/crab_*.*
+gsissh $RH rm -rf ./$TN/out_*.*
+echo " END  : rm end"
+
+}
+
+function CheckPass(){
+
+rm -rf voms.log
+echo $1 | voms-proxy-init -voms cms > voms.log 2>&1
+
+local Success=$( grep 'Remote VOMS server contacted succesfully' voms.log )
+local Fail=$( grep 'the password is incorrect or the PEM data is corrupted' voms.log )
+
+while [ ! "$Success" -a ! "$Fail" ]
+do
+    sleep 1
+    Success=$( grep 'Remote VOMS server contacted succesfully' voms.log )
+    Fail=$( grep 'the password is incorrect or the PEM data is corrupted' voms.log )
+done
+
+if [ "$Success" ]; then
+    echo "PASSWD: Success" 1>&2
+    rm -rf voms.log
+fi
+if [ "$Fail" ]; then
+    echo "PASSWD: Fail" 1>&2
+    echo "ERROR : Check your password" 1>&2
+    rm -rf voms.log
+    exit
+fi
+
+}
+
+function RefreshEndpoint(){
+
+local Submitted_back=$(sed -n 's/Submitted jobs://p' TaskInfo.CMS)
+if [ "$Submitted_back" ]; then
+    if [ "$Submitted_back" != "$1" ]; then
+	sed -e '/Submitted jobs:/d' TaskInfo.CMS > TaskInfo.temp
+	rm -rf TaskInfo.CMS
+	mv TaskInfo.temp TaskInfo.CMS
+	echo -e "Submitted jobs:$1" >> TaskInfo.CMS
+    fi
+else
+    echo -e "Submitted jobs:$1" >> TaskInfo.CMS
+fi
+
+if [ "$( grep 'Getoutput done' TaskInfo.CMS )" ]; then
+    sed -e '/Getoutput done/d' TaskInfo.CMS > TaskInfo.temp
+    rm -rf TaskInfo.CMS
+    mv TaskInfo.temp TaskInfo.CMS
+    echo "Submit done" >> TaskInfo.CMS
+fi
+
+}
+
+function OutputCheck(){
+
+local Dir=$( grep 'TaskName:' TaskInfo.CMS | sed -e 's/^[0-9a-zA-Z:]*_//' -e 's/_[0-9a-zA-Z]*$//' )
+local index=1
+local target=10000
+local rootfile=SSBTree
+local inputtest=0
+local errorfile=0
+
+if [ "$#" -eq 1 ]; then
+    inputtest=$( echo $1 | sed -e 's/[0-9]*//' )
+    if [ "$inputtest" ]; then
+	rootfile=$1
+    else
+	target=$1
+    fi
+elif [ "$#" -eq 2 ]; then
+    inputtest=$( echo $2 | sed -e 's/[0-9]*//' )
+    if [ "$inputtest" ]; then
+	target=$1
+	rootfile=$2
+    else
+	index=$1
+	target=$2
+    fi
+elif [ "$#" -eq 3 ]; then
+    index=$1
+    target=$2
+    rootfile=$3
+fi
+if [ "$index" -gt "$target" ]; then
+    inputtest=$index
+    index=$target
+    target=$inputtest    
+fi
+
+echo -e "OUTPUT: Checking ${rootfile}_[$index-$target] files"
+
+while [ "$index" -le "$target" ]; do
+    #if [ ! "$( find ./$Dir/res/ -maxdepth 1 -name ${rootfile}_${index}* )" ]; then     
+    if [ ! "$( find ./$Dir/res/ -maxdepth 1 -name ${rootfile}_${index}_* )" ]; then     
+	echo -e "ERROR : ${rootfile}_$index is missing"
+	errorfile=$((errorfile+1))
+    fi
+    index=$((index+1))
+done
+
+if [ "$errorfile" -gt 0 ]; then
+    echo -e "ERROR : $errorfile files are missing"
+    exit
+fi
+
+echo "OUTPUT: Output files are OK"
+
+}

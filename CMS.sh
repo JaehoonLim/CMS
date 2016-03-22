@@ -1,4 +1,6 @@
 #!/bin/bash
+# Crabjob Management Script v1.20
+
 source ./CMSHEADER
 
 if [ "$#" -gt 1 ]; then

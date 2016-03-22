@@ -1,4 +1,5 @@
 #!/bin/bash
+# Crabjob Management Script v1.20
 
 function AutoResubmit(){
 
@@ -77,7 +78,6 @@ while [ $DoWhile -eq 1 ]; do
 
     CrabStatus $MyPass resubmit.log
 
-    local ToResubmit=$( cat status.CMS | sed -e '1,/ExitCodes Summary/d' -e '/Total Jobs/,$d' -e '/Exit Code : 0/,/Exit Code meaning/d' -e '/See https/,/Wrapper/d' -e '/Exit Code/d' -e '/ExitCodes/d' -e 's/^.*List of jobs://' -e 's/ //g' -e 's/\t//g' -e 's/\n//g' -e 's/$/,/' -e 's/^,//' | tr -d '\n' | sed -e 's/,$/\n/' )
     local SubJobs=$( cat status.CMS | grep 'Jobs Submitted' | sed -e 's/Jobs Submitted//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
     local RunJobs=$( cat status.CMS | grep 'Jobs Running' | sed -e 's/Jobs Running//' -e 's/>>*//' -e 's/ //g' -e 's/\t//g' )
     local DoneJobs=$( cat status.CMS | sed -n '/Jobs with Wrapper Exit Code : 0/p' | sed -e 's/Jobs with Wrapper Exit Code : 0.*$//' -e 's/^.>>*>> //')
@@ -106,6 +106,9 @@ while [ $DoWhile -eq 1 ]; do
     else
 	DoneJobs=0
     fi
+
+
+    local ToResubmit=$( cat status.CMS | sed -e '1,/ExitCodes Summary/d' -e '/Total Jobs/,$d' -e '/Exit Code : 0/,/Exit Code meaning/d' -e '/See https/,/Wrapper/d' -e '/Exit Code/d' -e '/ExitCodes/d' -e 's/^.*List of jobs://' -e 's/ //g' -e 's/\t//g' -e 's/\n//g' -e 's/$/,/' -e 's/^,//' | tr -d '\n' | sed -e 's/,$/\n/' )
 
     if [ $ToResubmit ]; then
 
@@ -174,6 +177,32 @@ while [ $DoWhile -eq 1 ]; do
         echo " JOB  : There is No Cancelled job"
     fi
 
+
+    local Aborted=$( cat status.CMS | sed -e '1,/Jobs Aborted/d' | sed -e '3,$d' | sed -e '1,1d' -e 's/^.*List of jobs: //' )
+
+    if [ $Aborted ]; then
+
+	rm -f resubmit.CMS
+
+	echo -e " JOB  : Aborted job is $Aborted"
+        echo "START : crab -resubmit is running..."
+
+        echo -e "$MyPass\n$MyPass" | crab -forceResubmit $Aborted > resubmit.CMS 2>&1
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        echo "" >> resubmit.log
+        cat resubmit.CMS >> resubmit.log
+        local AbortedJobs=$( cat resubmit.CMS | grep 'Total of' | sed -e 's/crab:  Total of//' -e 's/jobs submitted.//' -e 's/ //g' -e 's/\t//g' )
+
+	echo -e " JOB  : $AbortedJobs jobs resubmitted"
+        echo " END  : crab -resubmit end"
+
+    else
+	AbortedJobs=0
+        echo " JOB  : There is No Aborted job"
+    fi
+
+
     index=$((index+1))
 
     echo ""
@@ -182,17 +211,18 @@ while [ $DoWhile -eq 1 ]; do
     echo -e "STATUS: Done      : $DoneJobs"
     echo -e "STATUS: Failed    : $ResubJobs"
     echo -e "STATUS: Cancelled : $CancelledJobs"
+    echo -e "STATUS: Aborted   : $AbortedJobs"
 
     if [ $RepeatMode -eq 1 ]; then
-	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs)) / $TotalJobs"
+	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $TotalJobs"
 	if [ $index -gt $target ]; then
 	    DoWhile=0
 	fi 
     fi 
 
     if [ $UntilMode -eq 1 ]; then
-	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs)) / $targetjob"
-	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs))" -lt "$targetjob" ]; then
+	echo -e "STATUS: Total     : $((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs)) / $targetjob"
+	if [ "$((SubJobs+ResubJobs+CancelledJobs+RunJobs+DoneJobs+AbortedJobs))" -lt "$targetjob" ]; then
 	    echo "ERROR : Number of jobs? (status.CMS, resubmit.log)"
 	    exit
 	fi
